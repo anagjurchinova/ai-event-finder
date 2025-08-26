@@ -1,21 +1,32 @@
-from app.extensions import db
-from app.util.user_util import NAME_MAX_LENGTH, SURNAME_MAX_LENGTH, EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH
-from app.models.event import guest_list
+"""
+User model definition for the Event Finder application.
+
+Defines the User table, fields, relationships, and password handling.
+"""
+
 from werkzeug.security import generate_password_hash, check_password_hash
+
+from app.extensions import db
+from app.models.event import guest_list
+from app.util.user_util import NAME_MAX_LENGTH, SURNAME_MAX_LENGTH, EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH
+
 
 class User(db.Model):
     """
-    Represents a user in the database.
+        Represents a registered user in the system.
 
-    Attributes:
-        id (int):                    Primary key.
-        name (str):                  User's first name (max length = NAME_MAX_LENGTH).
-        surname (str):               User's surname (max length = SURNAME_MAX_LENGTH).
-        email (str):                 User's email address (max length = EMAIL_MAX_LENGTH).
-        password_hash (str):              Hashed password (max length = PASSWORD_MAX_LENGTH).
-        version (int):               Optimistic lock version counter (auto-incremented on update).
+        Attributes:
+            id (int): Primary key.
+            name (str): First name (max length = NAME_MAX_LENGTH).
+            surname (str): Last name (max length = SURNAME_MAX_LENGTH).
+            email (str): Unique email address (max length = EMAIL_MAX_LENGTH).
+            password_hash (str): Hashed password (max length = PASSWORD_MAX_LENGTH). Write-only.
+            version (int): Optimistic lock version counter, auto-incremented on update.
+
+        Relationships:
+            events_attending (Relationship): Many-to-many relationship with Event for guest attendance.
+            organized_events (Relationship): One-to-many relationship with Event for events organized by this user.
     """
-
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(NAME_MAX_LENGTH), nullable=False)
     surname = db.Column(db.String(SURNAME_MAX_LENGTH), nullable=False)
@@ -39,13 +50,29 @@ class User(db.Model):
 
     @property
     def password(self):
+        """Prevent reading password directly. Password is write-only."""
         raise AttributeError("Password is write-only.")
 
     @password.setter
     def password(self, raw: str) -> None:
+        """
+            Hash and store a raw password.
+
+            Args:
+                raw (str): Plain-text password.
+        """
         self.password_hash = generate_password_hash(raw)  # pbkdf2:sha256 by default
 
     def verify_password(self, password: str) -> bool:
+        """
+               Verify a plain-text password against the stored hash.
+
+               Args:
+                   password (str): Password to verify.
+
+               Returns:
+                   bool: True if password matches, False otherwise.
+        """
         return check_password_hash(self.password_hash, password)
 
     __mapper_args__ = {

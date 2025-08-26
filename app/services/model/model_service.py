@@ -1,21 +1,42 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict
+from typing import List, Optional
+
+from openai.types.chat import ChatCompletionMessageParam
 
 from app.repositories.event_repository import EventRepository
-from app.services.embedding_service.embedding_service import EmbeddingService
+from app.services.embedding.embedding_service import EmbeddingService
 from app.util.model_util import DEFAULT_SYS_PROMPT
 
 
 class ModelService(ABC):
     """
-    Abstract base class for chat-based event querying.
+    Abstract base class for chat-based event retrieval and reasoning.
+
+    This service defines the contract for:
+    - Converting user queries into embeddings via `EmbeddingService`
+    - Using vector search (via `EventRepository`) to retrieve relevant events
+    - Building messages (system + user context) to query an LLM
+    - Returning either a conversational answer or a structured value (e.g., count)
+
+    Concrete implementations (e.g., `ModelServiceImpl`) are responsible for
+    integrating with a specific LLM provider and handling the full query lifecycle.
     """
 
-    def __init__(self,
-                 event_repository: EventRepository,
-                 embedding_service: EmbeddingService,
-                 sys_prompt: str | None = None):
-        """Initialize with an EventRepository for vector search."""
+    def __init__(
+            self,
+            event_repository: EventRepository,
+            embedding_service: EmbeddingService,
+            sys_prompt: str | None = None
+    ):
+        """
+        Initialize a ModelService with its dependencies.
+
+        Args:
+            event_repository: Repository interface for event storage and vector search.
+            embedding_service: Service for generating embeddings from text.
+            sys_prompt: Optional system prompt to guide the LLM.
+                        Defaults to `DEFAULT_SYS_PROMPT` if not provided.
+        """
         self.event_repository = event_repository
         self.embedding_service = embedding_service
         self.sys_prompt = sys_prompt or DEFAULT_SYS_PROMPT
@@ -23,45 +44,79 @@ class ModelService(ABC):
     @abstractmethod
     async def query_prompt(self, user_prompt: str, session_key: str) -> str:
         """
-        Embed the user prompt asynchronously, retrieve relevant events (RAG),
-        build chat messages, call an LLM asynchronously, and return the assistant's response.
+        Handle a free-form user query against the event database.
 
-        Workflow (as implemented in ModelServiceImpl):
-        1. Convert the user prompt into an embedding vector using `embedding_service`.
-        2. Retrieve the top-K most similar events via `event_repository.search_by_embedding()`.
-        3. Format the retrieved events into a readable context string.
-        4. Build system + user messages via `build_messages()`.
-        5. Call the LLM asynchronously and return the assistant's text response.
+        The standard flow is:
+        1. Embed the user prompt with `embedding_service`.
+        2. Perform vector similarity search via `event_repository.search_by_embedding`.
+        3. Format retrieved events into context.
+        4. Build a system + user message sequence.
+        5. Query the underlying LLM asynchronously.
+        6. Return the assistant’s text response.
 
         Args:
-            user_prompt: The user's input query.
+            user_prompt: The raw input query from the user.
+            session_key: A key for tracking conversational state (LLM-dependent).
 
         Returns:
-            str: The LLM's assistant response.
+            str: Assistant response, informed by retrieved events.
         """
+
+    @abstractmethod
+    def build_messages(
+            self,
+            sys_prompt: Optional[str],
+            context: str,
+            user_prompt: str,
+    ) -> List[ChatCompletionMessageParam]:
+        """
+        Construct a valid OpenAI ChatCompletion message sequence.
+
+        Implementations are responsible for:
+          - Combining the system prompt with contextual information
+            (e.g., retrieved events, prior history).
+          - Including the user’s raw prompt as the final message.
+          - Returning a sequence of role-based messages that conform to
+            the OpenAI `ChatCompletionMessageParam` schema.
+
+        Args:
+            sys_prompt (str | None):
+                The base system-level instructions to steer the assistant.
+                May be None, in which case the implementation should
+                handle defaults.
+            context (str):
+                Contextual grounding (retrieved events, history, or fallback).
+            user_prompt (str):
+                The original user input.
+
+        Returns:
+            List[ChatCompletionMessageParam]:
+                Messages formatted for the OpenAI API, e.g.:
+                [
+                    {"role": "system", "content": "..."},
+                    {"role": "user", "content": "..."}
+                ]
+        """
+        pass
 
     @abstractmethod
     async def extract_requested_event_count(self, user_prompt: str) -> int:
         """
-        Async version: Extract the number of events the user is asking for from a free-form prompt.
+        Extract the number of events requested from a user query.
 
-        This method should call the underlying LLM asynchronously with a dedicated
-        **count-extraction** system prompt that coerces the model to output a single integer (no prose).
-        Do **not** perform RAG or hit the repositories/embeddings for this operation.
+        The extraction should be handled via an LLM call with a specialized
+        system prompt that coerces the model to return a plain integer.
+
+        Expected behavior:
+        - Prefer explicit positive integers in the prompt.
+        - Handle ranges/comparisons sensibly (e.g., "up to 7" → 7).
+        - Ignore unrelated numerals (dates, times, etc.).
+        - Clamp to a minimum of 1 if the result is non-positive.
+        - If ambiguous, fall back to the configured default.
 
         Args:
-            user_prompt: The raw user input (e.g., "show me 5 tech events in Skopje").
+            user_prompt: The user’s query, e.g. "Show me 5 events this weekend".
 
         Returns:
-            int: The requested event count. If the prompt does not contain a clear,
-            positive integer, return the application default (e.g., `K` from env/config).
-
-        Expected behavior / normalization rules:
-        - Prefer an explicit positive integer if present (numerals or number words).
-        - For ranges or comparative phrases (e.g., "3–5", "up to 7", "at least 10"),
-          choose a single reasonable integer (e.g., the most specific bound available);
-          if ambiguity remains, fall back to the default.
-        - Ignore numerals clearly unrelated to quantity (dates, times, addresses).
-        - Clamp to a minimum of 1 if a non-positive value is produced by the LLM.
-        - Implementations should be robust to casing, punctuation, and extra text.
+            int: The normalized requested event count.
         """

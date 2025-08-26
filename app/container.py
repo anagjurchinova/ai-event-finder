@@ -1,3 +1,10 @@
+"""
+container.py
+
+Dependency Injection container for the application.
+Uses `dependency_injector` to configure repositories, services, and external clients.
+"""
+
 import os
 
 from dependency_injector import containers, providers
@@ -8,23 +15,36 @@ from app.repositories.chat_history_repository_impl import MemoryChatHistoryRepos
 from app.repositories.event_repository_impl import EventRepositoryImpl
 from app.repositories.user_repository_impl import UserRepositoryImpl
 from app.services.app_service_impl import AppServiceImpl
-from app.services.embedding_service.embedding_service_impl import EmbeddingServiceImpl
+from app.services.embedding.embedding_service_impl import EmbeddingServiceImpl
 from app.services.event_service_impl import EventServiceImpl
 from app.services.model.model_service_impl import ModelServiceImpl
 from app.services.user_service_impl import UserServiceImpl
 
 
 class Container(containers.DeclarativeContainer):
+    """Dependency injection container."""
+
     wiring_config = containers.WiringConfiguration(packages=["app.routes", "app.services"])
 
-
+    # ------------------------
     # Repositories
+    # ------------------------
+
     user_repository = providers.Singleton(
         UserRepositoryImpl,
     )
     event_repository = providers.Singleton(
         EventRepositoryImpl,
     )
+
+    history_repository = providers.Singleton(
+        MemoryChatHistoryRepository,
+        max_messages=int(os.getenv("CHAT_HISTORY_MAX", "50")),
+    )
+
+    # ------------------------
+    # LLM / Embedding clients
+    # ------------------------
 
     provider = Config.PROVIDER
 
@@ -44,15 +64,14 @@ class Container(containers.DeclarativeContainer):
         chat_model = providers.Object(getattr(Config, "DMR_LLM_MODEL", "ai/llama3.1"))
         embedding_model = providers.Object(getattr(Config, "DMR_EMBEDDING_MODEL", "ai/mxbai-embed-large"))
 
+    # ------------------------
+    # Services
+    # ------------------------
+
     embedding_service = providers.Singleton(
         EmbeddingServiceImpl,
         client=openai_client,
         model=embedding_model,
-    )
-
-    history_repo = providers.Singleton(
-        MemoryChatHistoryRepository,
-        max_messages=int(os.getenv("CHAT_HISTORY_MAX", "50")),
     )
 
     model_service = providers.Singleton(
@@ -61,7 +80,7 @@ class Container(containers.DeclarativeContainer):
         embedding_service=embedding_service,
         client=openai_client,
         model=chat_model,
-        history_repo=history_repo,
+        history_repo=history_repository,
     )
 
     user_service = providers.Singleton(UserServiceImpl, user_repository=user_repository)
@@ -80,5 +99,3 @@ class Container(containers.DeclarativeContainer):
         user_repo=user_repository,
         event_repo=event_repository,
     )
-
-

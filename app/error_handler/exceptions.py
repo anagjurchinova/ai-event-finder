@@ -1,35 +1,46 @@
+"""
+exceptions.py
+
+Custom exceptions used across the Event Finder application.
+
+Organized by domain:
+
+- User-related exceptions
+- Event-related exceptions
+- Embedding and model-related exceptions
+- Concurrency / internal error exceptions
+"""
+
+
+# ------------------------
+# User-related exceptions
+# ------------------------
+
+
 class UserNotFoundException(Exception):
     """
-    This exception will be raised when no user exists for the given identifier.
-    You must pass exactly one of the following: user_id, name, email!
+    Raised when no user exists for the given identifier.
+    Must provide exactly one identifier (user_id, name, or email).
+
+    Example:
+        raise UserNotFoundException("User with id=5 not found")
     """
 
-    def __init__(self, message:str ):
-        """
-        One of the following: user_id, name, email must be explicitly passed
-        when raising the exception.
-        Example:
-            raise UserNotFoundException(user_id=5)
-            raise UserNotFoundException(name="John")
-            raise UserNotFoundException(email="john@doe.com")
-        """
-
-        """
-            We use the identifiers dictionary and provided list to make sure that 
-            only one identifier was passed when raising the exception.
-        """
-
+    def __init__(self, message: str):
         super().__init__(message)
+
 
 class DuplicateEmailException(Exception):
     """
-    This exception will be raised when attempting to
-    create or update a user with an email that's already taken.
+    Raised when attempting to create or update a user with an email
+    that is already taken.
     """
-    def __init__(self, email:str):
+
+    def __init__(self, email: str):
         self.email = email
         message = f"User with email {email} already exists."
         super().__init__(message)
+
 
 class UserSaveException(Exception):
     """
@@ -37,11 +48,13 @@ class UserSaveException(Exception):
     Attributes:
         original_exception (Exception|None): The underlying exception.
     """
+
     def __init__(self, original_exception: Exception = None):
         self.original_exception = original_exception
         # generic message only
         message = "Unable to save user due to an internal error."
         super().__init__(message)
+
 
 class UserDeleteException(Exception):
     """
@@ -50,6 +63,7 @@ class UserDeleteException(Exception):
         user_id (int|None): ID of the user we tried to delete.
         original_exception (Exception|None): The underlying exception.
     """
+
     def __init__(self, user_id: int = None, original_exception: Exception = None):
         self.user_id = user_id
         self.original_exception = original_exception
@@ -57,9 +71,17 @@ class UserDeleteException(Exception):
         message = f"Unable to delete user{f' with id={user_id}' if user_id is not None else ''}."
         super().__init__(message)
 
+
+# ------------------------
+# Event-related exceptions
+# ------------------------
+
 class EventNotFoundException(Exception):
+    """Raised when no event exists for the given identifier."""
+
     def __init__(self, message):
         super().__init__(message)
+
 
 class EventDeleteException(Exception):
     """
@@ -68,6 +90,7 @@ class EventDeleteException(Exception):
         event_id (int|None): ID of the event we tried to delete.
         original_exception (Exception|None): The underlying exception.
     """
+
     def __init__(self, event_id: int = None, original_exception: Exception = None):
         self.event_id = event_id
         self.original_exception = original_exception
@@ -75,15 +98,21 @@ class EventDeleteException(Exception):
         message = f"Unable to delete event{f' with id={event_id}' if event_id is not None else ''}."
         super().__init__(message)
 
+
 class EventAlreadyExistsException(Exception):
+    """Raised when attempting to create an event that already exists."""
+
     def __init__(self, event_name: str, original_exception: Exception = None):
         self.original_exception = original_exception
 
         message = f"Event with name {event_name} already exists."
         super().__init__(message)
 
+
 class UserAlreadyInEventException(Exception):
-    def __init__(self, event_title: str, user_email:str):
+    """Raised when a user is already in an event."""
+
+    def __init__(self, event_title: str, user_email: str):
         self.event_title = event_title
         self.user_email = user_email
         message = f"User with email {user_email} already exists in event with title {event_title}."
@@ -91,54 +120,73 @@ class UserAlreadyInEventException(Exception):
 
 
 class UserNotInEventException(Exception):
-    def __init__(self, event_title: str, user_email:str):
+    """Raised when a user is not part of an event they are expected to be in."""
+
+    def __init__(self, event_title: str, user_email: str):
         self.event_title = event_title
         self.user_email = user_email
         message = f"User with email {user_email} doesn't exist in event with title {event_title}."
         super().__init__(message)
 
+
 class InvalidDateFormatException(Exception):
+    """Raised when a date string cannot be parsed to the expected format."""
+
     def __init__(self, date_string: str, date_format: str, original_exception: Exception = None):
         self.original_exception = original_exception
 
         message = f"Invalid date format {date_string}. Expected format: {date_format}."
         super().__init__(message)
 
+
 class EventSaveException(Exception):
-    """
-    Raised when persisting an event fails due to an internal error.
-    """
+    """Raised when persisting an event fails due to an internal error."""
 
     def __init__(self, original_exception: Exception):
         super().__init__("Unable to save event due to an internal error.")
         self.original_exception = original_exception
 
+
+# ------------------------
+# Embedding / Model exceptions
+# ------------------------
+
+
 class EmbeddingServiceException(Exception):
     """
     Raised for any embedding-related failure (bad input, provider error, shape mismatch, etc.).
-    `status_code` lets callers signal 4xx vs 5xx. `original_exception` can carry the root cause.
+
+    Attributes:
+        status_code (int): HTTP-like code (4xx vs 5xx).
+        original_exception (Exception|None): The underlying exception.
     """
+
     def __init__(self, message: str, status_code: int = 500, original_exception: Exception | None = None):
         self.status_code = int(status_code)
         self.original_exception = original_exception
         super().__init__(message)
 
-class ConcurrencyException(Exception):
-    """
-    Wraps cases where optimistic locking (via a version column)
-    fails because the data has been modified by another transaction
-    since it was last read.
-    """
-    def __init__(self, message: str):
-        super().__init__(message)
-
 
 class ModelWarmupException(Exception):
-    """
-    Raised when a model warm up at app start fails.
-    """
+    """Raised when a model warm-up at app start fails."""
+
     def __init__(self, message: str):
         super().__init__(message)
 
 
+# ------------------------
+# Internal / Concurrency exceptions
+# ------------------------
 
+
+class ConcurrencyException(Exception):
+    """
+    Raised when a database update fails due to concurrent modifications.
+
+    This typically occurs in optimistic locking scenarios, where
+    a record has been modified by another transaction after it
+    was last read, preventing an update to stale data.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)

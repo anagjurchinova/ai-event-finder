@@ -48,7 +48,7 @@ def _reset_container_between_tests():
     for p in (
         getattr(Container, "event_service", None),
         getattr(Container, "user_service", None),
-        getattr(Container, "embedding_service", None),
+        getattr(Container, "embedding", None),
     ):
         if isinstance(p, providers.Provider):
             try:

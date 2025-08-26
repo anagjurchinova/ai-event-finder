@@ -1,3 +1,13 @@
+"""
+Schemas for the Event entity using Marshmallow.
+
+- CreateEventSchema: validates and deserializes incoming event creation payloads.
+- UpdateEventSchema: validates and deserializes event update payloads (all fields optional).
+- EventSchema: serializes Event model instances for API responses, including organizer and guest info.
+
+Includes pre-load processing to trim string fields.
+"""
+
 from marshmallow import Schema, fields, validate, EXCLUDE, pre_load
 
 from app.constants import TITLE_MAX_LENGTH, DESCRIPTION_MAX_LENGTH, LOCATION_MAX_LENGTH, CATEGORY_MAX_LENGTH
@@ -6,11 +16,13 @@ from app.schemas.user_schema import UserSchema
 
 class CreateEventSchema(Schema):
     """
-    Schema for incoming event creation payload.
-    Validates and deserializes client-provided data.
-    Pre-processes string fields: trims whitespace.
-    Enforces string length and date format.
+    Schema for incoming event creation payloads.
+
+    - Validates and deserializes client-provided data.
+    - Preprocesses string fields: trims whitespace.
+    - Enforces string length, email format for organizer, and datetime format.
     """
+
     class Meta:
         # Drop any unknown fields instead of raising errors
         unknown = EXCLUDE
@@ -25,7 +37,6 @@ class CreateEventSchema(Schema):
             if isinstance(val, str):
                 data[key] = val.strip()
         return data
-
 
     """
     Title field:
@@ -106,8 +117,12 @@ class CreateEventSchema(Schema):
 class EventSchema(Schema):
     """
     Schema for outgoing event data.
-    Serializes internal user model into safe JSON.
+
+    - Serializes internal Event model instances to safe JSON.
+    - Includes organizer and guest information (nested UserSchema).
+    - Preserves field declaration order in output.
     """
+
     class Meta:
         # Exclude any unexpected attributes when dumping
         unknown = EXCLUDE
@@ -120,12 +135,12 @@ class EventSchema(Schema):
     )
     description = fields.Str(
         dump_only=True,
-        metadata={"description":"The event description"}
+        metadata={"description": "The event description"}
     )
     # fix to show in a better format
     datetime = fields.Str(
         dump_only=True,
-        metadata={"description":"The event host date and time"}
+        metadata={"description": "The event host date and time"}
     )
     location = fields.Str(
         dump_only=True,
@@ -148,6 +163,14 @@ class EventSchema(Schema):
 
 
 class UpdateEventSchema(Schema):
+    """
+    Schema for incoming event update payloads.
+
+    - Similar to CreateEventSchema, but all fields are optional.
+    - Preprocesses string fields: trims whitespace.
+    - Validates field lengths and datetime format if provided.
+    """
+
     class Meta:
         unknown = EXCLUDE
 

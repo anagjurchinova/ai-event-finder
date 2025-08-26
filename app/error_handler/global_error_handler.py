@@ -1,3 +1,17 @@
+"""
+global_error_handler.py
+
+Centralized error handling for Event Finder Flask application.
+
+- Registers handlers for:
+  - Marshmallow validation errors
+  - Common HTTP errors (400, 413, 415, etc.)
+  - Domain-specific exceptions (User, Event, Embedding, Concurrency, ModelWarmup)
+  - Fallback for all unhandled exceptions, logging detailed traceback
+
+- Intended to be registered after JWT/auth error handlers in the app factory.
+"""
+
 import logging
 import traceback
 
@@ -5,37 +19,49 @@ from flask import jsonify, request
 from marshmallow import ValidationError
 from werkzeug.exceptions import HTTPException, UnsupportedMediaType, BadRequest, RequestEntityTooLarge
 
+from app.error_handler.exceptions import (
+    UserNotFoundException,
+    DuplicateEmailException,
+    UserSaveException,
+    UserDeleteException,
+    EventNotFoundException,
+    EventAlreadyExistsException,
+    EventSaveException,
+    EventDeleteException,
+    UserNotInEventException,
+    UserAlreadyInEventException,
+    ConcurrencyException,
+    EmbeddingServiceException,
+    ModelWarmupException
+)
+
 
 def register_error_handlers(app):
     """
-    Error handlers compatible with Flask-RESTX
+    Register all global error handlers for the Flask app.
+
+    Handlers include:
+        - Marshmallow validation errors (422)
+        - HTTP/bad request errors (400, 413, 415)
+        - Domain-specific exceptions (404, 409, 500)
+        - Embedding and model warmup exceptions
+        - Generic fallback for unhandled exceptions (500)
+
+    Args:
+        app (Flask): The Flask application instance.
     """
-    
     logger = logging.getLogger(__name__)
 
-    # Custom exception handlers (your existing ones)
-    from app.error_handler.exceptions import (
-        UserNotFoundException,
-        DuplicateEmailException,
-        UserSaveException,
-        UserDeleteException,
-        EventNotFoundException,
-        EventAlreadyExistsException,
-        EventSaveException,
-        EventDeleteException,
-        UserNotInEventException,
-        UserAlreadyInEventException,
-        ConcurrencyException,
-        EmbeddingServiceException,
-        ModelWarmupException
-    )
+    # -------------------------
+    # Validation & HTTP errors
+    # -------------------------
 
     @app.errorhandler(ValidationError)
     def handle_marshmallow_validation(err: ValidationError):
         # err.messages is a dict of field -> list[str]
-        return jsonify({"error": {"code": "VALIDATION_ERROR","message": "Invalid request payload.","fields": err.messages,}}), 422
+        return jsonify({"error": {"code": "VALIDATION_ERROR", "message": "Invalid request payload.",
+                                  "fields": err.messages, }}), 422
 
-    # --- NEW: JSON/body issues ---
     @app.errorhandler(BadRequest)
     def handle_bad_request(err: BadRequest):
         # e.g. malformed JSON -> “Failed to decode JSON object …”
@@ -43,11 +69,16 @@ def register_error_handlers(app):
 
     @app.errorhandler(UnsupportedMediaType)
     def handle_unsupported_media(err: UnsupportedMediaType):
-        return jsonify({"error": { "code": "UNSUPPORTED_MEDIA_TYPE","message": err.description or "Unsupported media type."}}), 415
+        return jsonify(
+            {"error": {"code": "UNSUPPORTED_MEDIA_TYPE", "message": err.description or "Unsupported media type."}}), 415
 
     @app.errorhandler(RequestEntityTooLarge)
-    def handle_too_large(err: RequestEntityTooLarge):
-        return jsonify({ "error": { "code": "REQUEST_ENTITY_TOO_LARGE","message": "Payload too large."}}), 413
+    def handle_too_large(_err: RequestEntityTooLarge):
+        return jsonify({"error": {"code": "REQUEST_ENTITY_TOO_LARGE", "message": "Payload too large."}}), 413
+
+    # -------------------------
+    # User-related exceptions
+    # -------------------------
 
     @app.errorhandler(UserNotFoundException)
     def handle_user_not_found(exception):
@@ -64,6 +95,10 @@ def register_error_handlers(app):
     @app.errorhandler(UserDeleteException)
     def handle_user_delete(exception):
         return jsonify({"error": {"code": "USER_DELETE_ERROR", "message": str(exception)}}), 500
+
+    # -------------------------
+    # Event-related exceptions
+    # -------------------------
 
     @app.errorhandler(EventNotFoundException)
     def handle_event_not_found(exception):
@@ -89,38 +124,48 @@ def register_error_handlers(app):
     def handle_user_already_in_event(exception):
         return jsonify({"error": {"code": "USER_ALREADY_IN_EVENT", "message": str(exception)}}), 409
 
+    # -------------------------
+    # Concurrency & Embedding exceptions
+    # -------------------------
+
     @app.errorhandler(ConcurrencyException)
     def handle_concurrency_exception(exception):
         return jsonify({"error": {"code": "CONCURRENT_UPDATE", "message": str(exception)}}), 409
 
     @app.errorhandler(EmbeddingServiceException)
     def handle_embedding_service_error(exception: EmbeddingServiceException):
-        return jsonify({"error": {"code": "EMBEDDING_SERVICE_ERROR","message": str(exception),}}), getattr(exception, "status_code", 500)
+        return jsonify({"error": {"code": "EMBEDDING_SERVICE_ERROR", "message": str(exception), }}), getattr(exception,
+                                                                                                             "status_code",
+                                                                                                             500)
 
     @app.errorhandler(ModelWarmupException)
-    def handle_model_warmup_error(exc: ModelWarmupException):
+    def handle_model_warmup_error(_exc: ModelWarmupException):
         return {"error": "Internal server error"}, 500
 
     # -------------------------
-    # GLOBAL FALLBACK - DETAILED DEBUGGING
+    # Global fallback
     # -------------------------
-
     @app.errorhandler(Exception)
     def handle_all_exceptions(e):
-        logger.error("="*60)
+        """
+            Catch-all handler for unhandled exceptions.
+            Logs full traceback and request info for debugging.
+            Returns a generic 500 response, or forwards HTTPExceptions.
+        """
+        logger.error("=" * 60)
         logger.error(f"UNHANDLED EXCEPTION: {type(e).__name__}")
         logger.error(f"Message: {str(e)}")
         logger.error(f"Module: {type(e).__module__}")
         logger.error(f"Request: {request.method} {request.url}")
         logger.error(f"Headers: {dict(request.headers)}")
-        
+
         # Print the full traceback
         logger.error("Full traceback:")
         for line in traceback.format_exc().split('\n'):
             if line.strip():
                 logger.error(line)
-        logger.error("="*60)
-        
+        logger.error("=" * 60)
+
         # Handle HTTPExceptions
         if isinstance(e, HTTPException):
             return jsonify({
@@ -137,4 +182,3 @@ def register_error_handlers(app):
                 "message": f"Unexpected error: {type(e).__name__}"
             }
         }), 500
-
