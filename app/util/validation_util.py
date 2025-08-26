@@ -1,8 +1,9 @@
-from app.error_handler.exceptions import UserNotFoundException
-from app.error_handler.exceptions import EventNotFoundException
-from app.models.user import User
-from app.models.event import Event
 from typing import List
+
+from app.error_handler.exceptions import EventNotFoundException
+from app.error_handler.exceptions import UserNotFoundException
+from app.models.event import Event
+from app.models.user import User
 
 
 def validate_user(user: User, message: str) -> None:

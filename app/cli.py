@@ -1,7 +1,23 @@
+"""
+CLI commands for seeding and cleaning application data.
+
+This module provides commands to:
+- Seed users into the database.
+- Seed events from a CSV file into the database (with validation & embeddings).
+- Clean all seeded data (delete events first, then users).
+
+Usage:
+    flask seed users
+    flask seed events
+    flask seed clean
+"""
+
+import asyncio
 import csv
 import os
 from datetime import datetime
 from itertools import cycle
+
 from flask import current_app
 from flask.cli import AppGroup
 from sqlalchemy.exc import IntegrityError
@@ -18,12 +34,15 @@ from app.error_handler.exceptions import (
     EventSaveException,
     EventDeleteException,
     UserDeleteException,
-    EmbeddingServiceException,
     InvalidDateFormatException,
 )
 from app.extensions import db
 from app.models.event import Event
 from app.models.user import User
+
+# -------------------------------------------------------------------
+# CLI setup & constants
+# -------------------------------------------------------------------
 
 seed_cli = AppGroup("seed")
 
@@ -32,22 +51,37 @@ USERS_COUNT = int(os.getenv("SEED_USERS_COUNT", "20"))
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-def get_embedding_service():
-    return current_app.di.embedding_service()
 def get_event_service():
+    """Resolve the EventService from the dependency injection container."""
     return current_app.di.event_service()
 
+
 def _parse_datetime(date_string: str) -> datetime | None:
+    """
+       Parse a datetime string according to the default format.
+
+       Args:
+           date_string (str): String representation of a datetime.
+
+       Returns:
+           datetime | None: Parsed datetime object.
+
+       Raises:
+           InvalidDateFormatException: If parsing fails.
+       """
     try:
         return datetime.strptime((date_string or "").strip(), DEFAULT_DATE_FORMAT)
     except ValueError:
         raise InvalidDateFormatException(date_string, DEFAULT_DATE_FORMAT)
 
 
-@seed_cli.command("users")
-def seed_users():
-    """Seeds fake user data."""
+# -------------------------------------------------------------------
+# CLI commands
+# -------------------------------------------------------------------
 
+@seed_cli.command("users")
+def seed_users() -> None:
+    """Seed fake users into the database."""
     for user_index in range(1, USERS_COUNT + 1):
         db.session.add(User(
             name=f"User{user_index}",
@@ -67,8 +101,8 @@ def seed_users():
 
 
 @seed_cli.command("events")
-def seed_events():
-    """Load events from CSV, validate, embed, assign to users round-robin. No truncation."""
+def seed_events() -> None:
+    """Load events from CSV, validate them, embed, and assign round-robin to users."""
     users = User.query.order_by(User.id.asc()).all()
     if not users:
         raise UserNotFoundException("No users found. Run `flask seed users` first.")
@@ -96,7 +130,7 @@ def seed_events():
         svc = get_event_service()
 
         for row_index, csv_row in enumerate(csv_rows, start=1):
-            title = (csv_row.get("name" or "title") or "").strip().replace("/","-")
+            title = (csv_row.get("name" or "title") or "").strip().replace("/", "-")
             description = (csv_row.get("description") or "").strip()
             location = (csv_row.get("location") or "").strip()
             category = (csv_row.get("category") or "").strip()
@@ -112,12 +146,12 @@ def seed_events():
                 continue
 
             if (len(title) > TITLE_MAX_LENGTH or
-                len(description) > DESCRIPTION_MAX_LENGTH or
-                len(location) > LOCATION_MAX_LENGTH or
-                len(category) > CATEGORY_MAX_LENGTH):
-                    print(f"[{row_index}] skipped: field exceeds max length")
-                    length_violations += 1
-                    continue
+                    len(description) > DESCRIPTION_MAX_LENGTH or
+                    len(location) > LOCATION_MAX_LENGTH or
+                    len(category) > CATEGORY_MAX_LENGTH):
+                print(f"[{row_index}] skipped: field exceeds max length")
+                length_violations += 1
+                continue
 
             event_organizer = next(round_robin_users)
             data = {

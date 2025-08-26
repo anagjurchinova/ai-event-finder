@@ -1,16 +1,28 @@
+"""
+Schemas for the User entity using Marshmallow.
+
+- CreateUserSchema: validates and deserializes incoming user creation payloads.
+- UpdateUserSchema: validates and deserializes user update payloads (all fields optional).
+- UserSchema: serializes User model instances for API responses, excluding sensitive fields like passwords.
+
+Includes pre-load processing to trim strings and normalize emails.
+"""
+
 from marshmallow import Schema, fields, validate, EXCLUDE, pre_load
+
 from app.util.user_util import (
     PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, NAME_MAX_LENGTH, SURNAME_MAX_LENGTH, EMAIL_MAX_LENGTH)
-# Constants for validation lengths
 
 
 class CreateUserSchema(Schema):
     """
-    Schema for incoming user creation payload.
-    Validates and deserializes client-provided data.
-    Pre-processes string fields: trims whitespace and lowercases email.
-    Enforces string length, email format, and password complexity requirements.
+    Schema for incoming user creation payloads.
+
+    - Validates and deserializes client-provided data.
+    - Preprocesses string fields: trims whitespace and lowercases email.
+    - Enforces string length, email format, and password complexity requirements.
     """
+
     class Meta:
         # Drop any unknown fields instead of raising errors
         unknown = EXCLUDE
@@ -104,13 +116,16 @@ class CreateUserSchema(Schema):
         }
     )
 
+
 class UpdateUserSchema(Schema):
     """
-    Schema for incoming user creation payload.
-    Validates and deserializes client-provided data.
-    Pre-processes string fields: trims whitespace and lowercases email.
-    Enforces string length, email format, and password complexity requirements.
+    Schema for incoming user update payloads.
+
+    - Similar to CreateUserSchema, but all fields are optional.
+    - Preprocesses string fields: trims whitespace.
+    - Validates field lengths and password complexity if provided.
     """
+
     class Meta:
         # Drop any unknown fields instead of raising errors
         unknown = EXCLUDE
@@ -125,7 +140,6 @@ class UpdateUserSchema(Schema):
             if isinstance(val, str):
                 data[key] = val.strip()
         return data
-
 
     """
     Name field:
@@ -181,31 +195,31 @@ class UpdateUserSchema(Schema):
         }
     )
 
+
 class UserSchema(Schema):
     """
     Schema for outgoing user data.
-    Serializes internal user model into safe JSON.
-    Excludes sensitive fields like password.
+
+    - Serializes internal User model instances to safe JSON.
+    - Excludes sensitive fields like passwords.
+    - Preserves field declaration order in output.
     """
+
     class Meta:
         # Exclude any unexpected attributes when dumping
         unknown = EXCLUDE
         # Preserve field declaration order in output
         ordered = True
 
-    #id = fields.Int(
-    #    dump_only=True,
-    #    metadata={"description":"Unique identifier for the user"}
-    #)
     name = fields.Str(
         dump_only=True,
         metadata={"description": "User's first name"}
     )
     surname = fields.Str(
         dump_only=True,
-        metadata={"description":"User's surname"}
+        metadata={"description": "User's surname"}
     )
     email = fields.Email(
         dump_only=True,
-        metadata={"description":"User's email address"}
+        metadata={"description": "User's email address"}
     )

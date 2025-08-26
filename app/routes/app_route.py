@@ -1,15 +1,17 @@
 from dependency_injector.wiring import Provide, inject
+from flask import request, abort
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_restx import Namespace, Resource
+
 from app.container import Container
 from app.schemas.user_schema import UserSchema
 from app.services.app_service import AppService
 from app.services.model.model_service import ModelService
 from app.util.logging_util import log_calls
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from flask_restx import Namespace, Resource
-from flask import request, abort
 
-app_ns = Namespace("app", description="Event participation-related operations")
+app_ns = Namespace("app", description="Event participation-related and model prompt operations")
 users_schema = UserSchema(many=True)
+
 
 @app_ns.route("/prompt")
 @log_calls("app.routes")
@@ -19,35 +21,52 @@ class PromptResource(Resource):
     @inject
     @jwt_required()
     async def get(
-        self,
-        model_service: ModelService = Provide[Container.model_service],
+            self,
+            model_service: ModelService = Provide[Container.model_service],
     ):
-        """Accept a user prompt via query-string and return the model’s response"""
+        """
+        Accepts a user prompt via query parameter and returns the model’s response.
+
+        Query Parameters:
+            - prompt (str): Required. The user’s input.
+            - chat_id (str): Optional. Used to separate conversation threads.
+
+        Returns:
+            JSON object containing:
+              - answer (str): The model’s response.
+              - session_key (str): Key used to track conversation history.
+        """
         user_prompt = request.args.get("prompt")
         if not user_prompt:
             abort(400, "'prompt' query parameter is required")
 
         # Build a stable session_key for history
-        user_id = str(get_jwt_identity())  # e.g., user email/subject from JWT
-        chat_id = request.args.get("chat_id")  # optional, to have multiple conversations
+        user_id = str(get_jwt_identity())
+        chat_id = request.args.get("chat_id")
         session_key = f"{user_id}:{chat_id}" if chat_id else user_id
 
         answer = await model_service.query_prompt(user_prompt, session_key=session_key)
         return {"answer": answer, "session_key": session_key}, 200
 
-# Endpoint: POST and DELETE /app/<event_title>/participants/<user_email>
+
 @app_ns.route("/<string:event_title>/participants/<string:user_email>")
 @log_calls("app.routes")
 class ParticipantResource(Resource):
     @inject
     @jwt_required()
     def post(
-        self,
-        event_title: str,
-        user_email: str,
-        app_service: AppService = Provide[Container.app_service],
+            self,
+            event_title: str,
+            user_email: str,
+            app_service: AppService = Provide[Container.app_service],
     ):
-        """Add a participant (by email in URL) to a specific event"""
+        """
+        Add a participant (by email) to a specific event.
+
+        Path Parameters:
+            - event_title (str): Title of the event.
+            - user_email (str): Email of the participant to add.
+        """
 
         app_service.add_participant_to_event(event_title, user_email)
         return {"message": f"User '{user_email}' successfully added to event '{event_title}'"}, 201
@@ -55,28 +74,42 @@ class ParticipantResource(Resource):
     @inject
     @jwt_required()
     def delete(
-        self,
-        event_title: str,
-        user_email: str,
-        app_service: AppService = Provide[Container.app_service],
+            self,
+            event_title: str,
+            user_email: str,
+            app_service: AppService = Provide[Container.app_service],
     ):
-        """Remove a participant (by email in URL) from a specific event"""
+        """
+        Remove a participant (by email) from a specific event.
+
+        Path Parameters:
+            - event_title (str): Title of the event.
+            - user_email (str): Email of the participant to remove.
+        """
 
         app_service.remove_participant_from_event(event_title, user_email)
         return {"message": f"User '{user_email}' removed from event '{event_title}'"}, 200
 
-# Endpoint: GET /app/<event_title>/participants
+
 @app_ns.route("/<string:event_title>/participants")
 @log_calls("app.routes")
 class ListParticipantsResource(Resource):
     @inject
     @jwt_required()
     def get(
-        self,
-        event_title: str,
-        app_service: AppService = Provide[Container.app_service],
+            self,
+            event_title: str,
+            app_service: AppService = Provide[Container.app_service],
     ):
-        """List all participants in an event"""
+        """
+        List all participants in an event.
+
+        Path Parameters:
+            - event_title (str): Title of the event.
+
+        Returns:
+            List of users (serialized with UserSchema).
+        """
 
         participant_list = app_service.list_participants(event_title)
         return users_schema.dump(participant_list), 200

@@ -1,90 +1,132 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List
+
 from sqlalchemy.orm import Session
+
 from app.models.user import User
 
 
 class UserRepository(ABC):
     """
-    Interface for User repository operations.
+    Abstract base class defining the contract for User repository operations.
+
+    Implementations are responsible for:
+    - Fetching users by ID, email, or name
+    - Persisting and deleting users
+    - Checking existence of users
+    - Returning lists of users
+
+    All methods operate within the context of a SQLAlchemy session.
     """
 
     @abstractmethod
-    def get_by_id(self, user_id: int, session:Session) -> Optional[User]:
+    def get_by_id(self, user_id: int, session: Session) -> Optional[User]:
         """
-        Retrieve a user by its unique identifier.
+        Retrieve a user by their unique database ID.
 
-        :param user_id: The primary key of the user.
-        :return: The User instance if found, otherwise None.
-        """
-        raise NotImplementedError
+        Args:
+            user_id (int): The primary key of the user.
+            session (Session): SQLAlchemy session to use for the query.
 
-    @abstractmethod
-    def get_by_email(self, email: str, session:Session) -> Optional[User]:
+        Returns:
+            Optional[User]: The User instance if found, else None.
         """
-        Retrieve a user by their email address.
-
-        :param email: The user's email.
-        :return: The User instance if found, otherwise None.
-        """
-        raise NotImplementedError
+        pass
 
     @abstractmethod
-    def get_by_name(self, name: str, session:Session) -> Optional[User]:
+    def get_by_email(self, email: str, session: Session) -> Optional[User]:
         """
-        Retrieve a user by their name.
+        Retrieve a user by email.
 
-        :param name: The user's name.
-        :return: The User instance if found, otherwise None.
-        """
-        raise NotImplementedError
+        Args:
+            email (str): The user's email address.
+            session (Session): SQLAlchemy session to use.
 
-    @abstractmethod
-    def get_all(self, session:Session) -> List[User]:
+        Returns:
+            Optional[User]: The User instance if found, else None.
         """
-        Retrieve all users in the system.
-
-        :return: A list of all User instances.
-        """
-        raise NotImplementedError
+        pass
 
     @abstractmethod
-    def save(self, user: User, session:Session) -> User:
+    def get_by_name(self, name: str, session: Session) -> Optional[User]:
+        """
+        Retrieve a user by name.
+
+        Args:
+            name (str): The user's name.
+            session (Session): SQLAlchemy session to use.
+
+        Returns:
+            Optional[User]: The User instance if found, else None.
+        """
+        pass
+
+    @abstractmethod
+    def get_all(self, session: Session) -> list[type[User]]:
+        """
+        Retrieve all users.
+
+        Args:
+            session (Session): SQLAlchemy session to use.
+
+        Returns:
+            List[User]: A list of all User instances.
+        """
+        pass
+
+    @abstractmethod
+    def save(self, user: User, session: Session) -> User:
         """
         Persist a new user or update an existing one.
 
-        :param user: The User instance to save.
-        :return: The saved User instance (with any DB-generated fields populated).
+        Args:
+            user (User): The User instance to save.
+            session (Session): SQLAlchemy session to use.
+
+        Returns:
+            User: The saved User instance, including DB-generated fields.
         """
-        raise NotImplementedError
+        pass
 
     @abstractmethod
-    def delete_by_id(self, user_id: int, session:Session) -> None:
+    def delete_by_id(self, user_id: int, session: Session) -> None:
         """
-        Delete a user given their unique identifier.
+        Delete a user by ID.
 
-        :param user_id: The primary key of the user to delete.
-        :raises UserNotFound: If no user exists with the given ID.
-        :raises AppException: If the deletion fails at the database level.
-        """
-        raise NotImplementedError
+        Args:
+            user_id (int): Primary key of the user to delete.
+            session (Session): SQLAlchemy session to use.
 
-    @abstractmethod
-    def exists_by_id(self, user_id: int, session:Session) -> bool:
+        Raises:
+            UserNotFound: If the user does not exist.
+            AppException: On database-level deletion failure.
         """
-        Check whether a user exists by their ID.
-
-        :param user_id: The primary key to check.
-        :return: True if a user with that ID exists, False otherwise.
-        """
-        raise NotImplementedError
+        pass
 
     @abstractmethod
-    def exists_by_name(self, name: str, session:Session) -> bool:
+    def exists_by_id(self, user_id: int, session: Session) -> bool:
         """
-        Check whether a user exists by their name.
+        Check if a user exists by ID.
 
-        :param name: The user's name to check.
-        :return: True if a user with that name exists, False otherwise.
+        Args:
+            user_id (int): Primary key to check.
+            session (Session): SQLAlchemy session to use.
+
+        Returns:
+            bool: True if a user exists with the given ID, else False.
         """
-        raise NotImplementedError
+        pass
+
+    @abstractmethod
+    def exists_by_name(self, name: str, session: Session) -> bool:
+        """
+        Check if a user exists by name.
+
+        Args:
+            name (str): User's name to check.
+            session (Session): SQLAlchemy session to use.
+
+        Returns:
+            bool: True if a user exists with the given name, else False.
+        """
+        pass
